@@ -1,0 +1,16 @@
+# Ignore SQLite database
+database.db
+
+# Ignore generated QR codes and debug emails
+/static/qrcodes/
+/debug_emails/
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# Virtual environment
+.venv/
+
+# Environment files
+.env

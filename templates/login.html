@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block title %}Connexion Administrateur - JE Event QR{% endblock %}
+
+{% block content %}
+<div class="auth-wrapper">
+    <div class="card auth-card">
+        <div class="auth-header">
+            <h1 class="auth-title">Administration</h1>
+            <p class="auth-subtitle">Connectez-vous pour gérer les inscriptions et scanner les participants</p>
+        </div>
+        
+        <form action="{{ url_for('admin_login') }}" method="POST">
+            <div class="form-group">
+                <label for="username" class="form-label">Identifiant</label>
+                <input type="text" id="username" name="username" class="form-control" placeholder="admin" required autofocus>
+            </div>
+            
+            <div class="form-group">
+                <label for="password" class="form-label">Mot de passe</label>
+                <input type="password" id="password" name="password" class="form-control" placeholder="••••••••" required>
+            </div>
+            
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Se connecter</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

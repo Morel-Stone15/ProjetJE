@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+
+{% block title %}Scanner QR Code - Validation des Entrées{% endblock %}
+
+{% block head %}
+<!-- Import Html5Qrcode Library from CDN -->
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+{% endblock %}
+
+{% block content %}
+<div class="scanner-wrapper">
+    <a href="{{ url_for('admin_dashboard') }}" class="back-link">
+        <span>←</span> Retour au Tableau de Bord
+    </a>
+
+    <div style="text-align: center; margin-bottom: 1.5rem;">
+        <h1 style="font-size: 1.75rem; font-weight: 800; letter-spacing: -0.5px;">Scanner de Contrôle d'Accès</h1>
+        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.25rem;">
+            Scannez les billets des participants pour valider leur entrée.
+        </p>
+    </div>
+
+    <!-- Scanner Viewport -->
+    <div class="scanner-view-container">
+        <!-- HTML5-QRCODE Reader Element -->
+        <div id="reader"></div>
+        
+        <!-- Animated Scanner Grid overlay -->
+        <div class="scanner-overlay" id="scannerOverlay">
+            <div class="scanner-target-box"></div>
+        </div>
+        
+        <!-- Feedback Overlay (Dynamic injection via JS) -->
+        <div class="scan-feedback" id="scanFeedback">
+            <div class="scan-feedback-icon" id="feedbackIcon">✅</div>
+            <h2 class="scan-feedback-title" id="feedbackTitle">Entrée Validée</h2>
+            <p class="scan-feedback-text" id="feedbackText">Participant : Alice Martin</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <!-- Camera Controls -->
+        <div class="scanner-controls">
+            <div style="display: flex; gap: 0.75rem;">
+                <button id="startBtn" class="btn btn-primary" style="flex: 1;">
+                    📷 Activer la caméra
+                </button>
+                <button id="stopBtn" class="btn btn-secondary" style="flex: 1;" disabled>
+                    ⏹️ Arrêter
+                </button>
+            </div>
+            
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusMessage">Caméra inactive</span>
+            </div>
+        </div>
+        
+
+        
+        <!-- Manual validation fallback -->
+        <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+            <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--text-secondary);">
+                Saisie Manuelle (Secours)
+            </h3>
+            <div style="display: flex; gap: 0.5rem;">
+                <input type="text" id="manualToken" class="form-control" placeholder="Entrez le jeton unique du ticket..." style="font-family: monospace;">
+                <button onclick="validateManualToken()" class="btn btn-secondary">Valider</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/scanner.js') }}"></script>
+{% endblock %}

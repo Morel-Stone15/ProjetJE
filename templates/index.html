@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}Événements — Junior Entreprise{% endblock %}
+
+{% block content %}
+<div style="text-align:center;margin-bottom:3rem;margin-top:1rem;">
+  <span style="font-size:.8rem;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:var(--primary);background:rgba(59,130,246,.1);padding:.3rem 1rem;border-radius:var(--radius-full);">
+    ⚡ Junior Entreprise
+  </span>
+  <h1 style="font-size:2.5rem;font-weight:800;margin-top:1rem;letter-spacing:-1px;">Prochains Événements</h1>
+  <p style="color:var(--text-secondary);max-width:560px;margin:.5rem auto 0;font-size:1.05rem;">
+    Inscrivez-vous pour obtenir votre QR Code d'accès et participer à nos activités.
+  </p>
+</div>
+
+<div style="max-width:800px;margin:0 auto;">
+  {% if events %}
+  <div style="display:grid;grid-template-columns:1fr;gap:1.5rem;">
+    {% for event in events %}
+    <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:2rem;flex-wrap:wrap;">
+      <div style="flex:1;min-width:220px;">
+        <h2 style="font-size:1.3rem;font-weight:700;margin-bottom:.5rem;">{{ event.name }}</h2>
+        <div style="display:flex;flex-wrap:wrap;gap:.75rem;font-size:.875rem;color:var(--text-secondary);margin-bottom:.5rem;">
+          <span>📅 {{ format_date(event.date) }}</span>
+          {% if event.location %}<span>📍 {{ event.location }}</span>{% endif %}
+        </div>
+        {% if event.description %}
+        <p style="color:var(--text-muted);font-size:.9rem;line-height:1.55;margin:0;">{{ event.description }}</p>
+        {% endif %}
+      </div>
+      <a href="{{ url_for('event_register', event_id=event.id) }}" class="btn btn-primary"
+         style="padding:.85rem 1.5rem;font-size:.95rem;white-space:nowrap;">
+        S'inscrire 🚀
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card" style="text-align:center;padding:4rem 2rem;color:var(--text-secondary);">
+    <p style="font-size:1.75rem;margin-bottom:.5rem;">👋 Bienvenue !</p>
+    <p style="max-width:420px;margin:0 auto;line-height:1.6;">
+      Il n'y a pas d'événement prévu pour le moment.<br>Revenez bientôt pour découvrir nos prochains hackathons et ateliers !
+    </p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

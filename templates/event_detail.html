@@ -1,0 +1,195 @@
+{% extends 'base.html' %}
+{% block title %}{{ event.name }} — Gestion des Participants{% endblock %}
+
+{% block content %}
+<a href="{{ url_for('admin_dashboard') }}" class="back-link">← Retour au Tableau de Bord</a>
+
+<!-- Event Header -->
+<div class="detail-header">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
+    <div>
+      <h1 class="detail-title">{{ event.name }}</h1>
+      <div style="display:flex;flex-wrap:wrap;gap:.75rem;margin-top:.35rem;color:var(--text-secondary);font-size:.9rem;">
+        <span>📅 {{ format_date(event.date) }}</span>
+        {% if event.location %}<span>📍 {{ event.location }}</span>{% endif %}
+      </div>
+      {% if event.description %}
+      <p style="color:var(--text-muted);font-size:.9rem;margin-top:.65rem;">{{ event.description }}</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Share Link -->
+<div class="card share-card" style="margin-bottom:1.5rem;">
+  <div style="flex:1;min-width:0;">
+    <span style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-secondary);">
+      🔗 Lien d'inscription public
+    </span>
+    <div style="display:flex;gap:.5rem;align-items:center;margin-top:.4rem;flex-wrap:wrap;">
+      <span id="registerLink" class="share-link-text">{{ register_link }}</span>
+      <button onclick="copyLink()" class="btn btn-secondary" style="padding:.35rem .7rem;font-size:.8rem;">Copier</button>
+      <a href="{{ url_for('event_register', event_id=event.id) }}" target="_blank"
+         class="btn btn-secondary" style="padding:.35rem .7rem;font-size:.8rem;">Ouvrir ↗</a>
+    </div>
+  </div>
+</div>
+
+<div class="grid-layout">
+
+  <!-- ── Participants Table ── -->
+  <div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;">
+      <h2 style="font-size:1.1rem;font-weight:700;">
+        👥 Participants inscrits
+        <span style="font-size:.85rem;font-weight:500;color:var(--text-secondary);">({{ participants|length }})</span>
+      </h2>
+    </div>
+
+    {% if participants %}
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Nom / Prénom</th>
+            <th>Classe</th>
+            <th>Département</th>
+            <th>Téléphone</th>
+            <th>E-mail</th>
+            <th>QR</th>
+            <th>Présence</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in participants %}
+          <tr>
+            <td>
+              <div style="font-weight:600;">{{ p.prenom }} {{ p.nom }}</div>
+            </td>
+            <td><span style="color:var(--text-secondary);font-size:.85rem;">{{ p.classe }}</span></td>
+            <td><span style="color:var(--text-secondary);font-size:.85rem;">{{ p.departement }}</span></td>
+            <td><span style="color:var(--text-muted);font-size:.85rem;">{{ p.telephone }}</span></td>
+            <td><span style="color:var(--text-muted);font-size:.82rem;">{{ p.email }}</span></td>
+
+            <!-- QR Thumb with hover preview -->
+            <td>
+              <div class="qr-thumb-container">
+                <img src="/static/qrcodes/{{ p.ticket_token }}.png" class="qr-thumb" alt="QR">
+                <div class="qr-large-preview">
+                  <img src="/static/qrcodes/{{ p.ticket_token }}.png" alt="QR Large">
+                  <div style="text-align:center;color:black;font-size:9px;margin-top:4px;font-family:monospace;">
+                    {{ p.ticket_token[:8] }}…
+                  </div>
+                </div>
+              </div>
+            </td>
+
+            <!-- Check-in status -->
+            <td>
+              {% if p.checked_in == 1 %}
+                <span class="badge badge-present">✅ Présent</span>
+                <div style="font-size:.72rem;color:var(--text-muted);margin-top:.2rem;">{{ p.checked_in_at }}</div>
+              {% else %}
+                <span class="badge badge-absent">⏳ Inscrit</span>
+              {% endif %}
+            </td>
+
+            <!-- Action buttons -->
+            <td>
+              <div style="display:flex;gap:.35rem;justify-content:flex-end;flex-wrap:wrap;">
+                <!-- View ticket (QR recovery) -->
+                <a href="{{ url_for('register_success', token=p.ticket_token) }}" target="_blank"
+                   class="btn btn-secondary" style="padding:.3rem .55rem;font-size:.75rem;" title="Voir le billet">
+                  🎫
+                </a>
+                <!-- Resend email -->
+                <form action="{{ url_for('resend_ticket', part_id=p.id) }}" method="POST" style="display:inline;">
+                  <button type="submit" class="btn btn-secondary" style="padding:.3rem .55rem;font-size:.75rem;"
+                          title="Renvoyer l'e-mail de confirmation">
+                    📧
+                  </button>
+                </form>
+                <!-- Delete -->
+                <form action="{{ url_for('delete_participant', part_id=p.id) }}" method="POST"
+                      onsubmit="return confirm('Supprimer {{ p.prenom }} {{ p.nom }} ?');" style="display:inline;">
+                  <button type="submit" class="btn btn-danger" style="padding:.3rem .55rem;font-size:.75rem;"
+                          title="Supprimer">
+                    🗑️
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% else %}
+    <div class="card" style="text-align:center;padding:3rem 1.5rem;color:var(--text-secondary);">
+      <p style="font-size:1.2rem;margin-bottom:.5rem;">Aucun inscrit pour le moment</p>
+      <p style="font-size:.85rem;">Partagez le lien ci-dessus ou ajoutez un participant manuellement.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ── Manual Registration Form ── -->
+  <div>
+    <div class="card" style="position:sticky;top:90px;">
+      <h2 style="font-size:1.1rem;font-weight:700;margin-bottom:1.25rem;">👤 Inscription manuelle</h2>
+      <form action="{{ url_for('event_detail', event_id=event.id) }}" method="POST">
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
+          <div class="form-group">
+            <label class="form-label">Nom *</label>
+            <input type="text" name="nom" class="form-control" placeholder="DUPONT" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Prénom *</label>
+            <input type="text" name="prenom" class="form-control" placeholder="Jean" required>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
+          <div class="form-group">
+            <label class="form-label">Classe *</label>
+            <input type="text" name="classe" class="form-control" placeholder="M1 Info" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Département *</label>
+            <input type="text" name="departement" class="form-control" placeholder="Génie Log." required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Téléphone *</label>
+          <input type="tel" name="telephone" class="form-control" placeholder="+33 6 12 34 56 78" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">E-mail *</label>
+          <input type="email" name="email" class="form-control" placeholder="jean.dupont@ecole.fr" required>
+        </div>
+
+        <p style="font-size:.72rem;color:var(--text-muted);margin-bottom:.75rem;">
+          * Un QR Code de confirmation sera généré et l'e-mail envoyé automatiquement.
+        </p>
+
+        <button type="submit" class="btn btn-primary" style="width:100%;">Inscrire le participant</button>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copyLink() {
+  navigator.clipboard.writeText(document.getElementById('registerLink').innerText)
+    .then(() => alert('Lien copié !'))
+    .catch(() => alert('Impossible de copier automatiquement.'));
+}
+</script>
+{% endblock %}

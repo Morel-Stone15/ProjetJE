@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}QR Code Manager - Junior Entreprise{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <header>
+        <div class="nav-container">
+            <a href="/" class="logo-link">
+                <span class="logo-text">⚡ JE Event QR</span>
+            </a>
+            <nav class="nav-actions">
+                {% if session.get('logged_in') %}
+                    <a href="{{ url_for('admin_dashboard') }}" class="nav-link {% if request.path == url_for('admin_dashboard') %}active{% endif %}">Événements</a>
+                    <a href="{{ url_for('scan') }}" class="nav-link {% if request.path == url_for('scan') %}active{% endif %}">Scanner QR</a>
+                    <a href="{{ url_for('admin_logout') }}" class="btn btn-secondary btn-sm" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">Déconnexion</a>
+                {% else %}
+                    <a href="{{ url_for('admin_login') }}" class="nav-link {% if request.path == url_for('admin_login') %}active{% endif %}">Connexion Admin</a>
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-container">
+                    {% for category, message in messages %}
+                        <div class="flash-message flash-{{ category }}">
+                            {% if category == 'success' %}
+                                <span>✅</span>
+                            {% else %}
+                                <span>⚠️</span>
+                            {% endif %}
+                            <span>{{ message }}</span>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+        <p>&copy; {{ datetime.now().year if datetime else 2026 }} Junior Entreprise - Tous droits réservés.</p>
+    </footer>
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html>

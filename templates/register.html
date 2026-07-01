@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block title %}Inscription : {{ event.name }} - Junior Entreprise{% endblock %}
+
+{% block content %}
+<div class="register-wrapper">
+  <div class="card register-card">
+
+    <div style="text-align:center;margin-bottom:1.75rem;">
+      <span style="font-size:.8rem;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:var(--primary);background:rgba(59,130,246,.1);padding:.3rem .9rem;border-radius:var(--radius-full);">Inscription Événement</span>
+      <h1 style="font-size:1.6rem;font-weight:800;margin-top:.9rem;letter-spacing:-.5px;">{{ event.name }}</h1>
+    </div>
+
+    <div class="register-event-meta">
+      <div style="display:flex;gap:.5rem;align-items:center;color:var(--text-secondary);font-size:.9rem;">
+        <span>📅</span> <strong>Date :</strong>&nbsp;{{ format_date(event.date) }}
+      </div>
+      {% if event.location %}
+      <div style="display:flex;gap:.5rem;align-items:center;color:var(--text-secondary);font-size:.9rem;margin-top:.4rem;">
+        <span>📍</span> <strong>Lieu :</strong>&nbsp;{{ event.location }}
+      </div>
+      {% endif %}
+      {% if event.description %}
+      <p style="color:var(--text-muted);font-size:.85rem;margin-top:.75rem;border-top:1px solid var(--border-color);padding-top:.75rem;">{{ event.description }}</p>
+      {% endif %}
+    </div>
+
+    <form action="{{ url_for('event_register', event_id=event.id) }}" method="POST">
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <div class="form-group">
+          <label for="nom" class="form-label">Nom *</label>
+          <input type="text" id="nom" name="nom" class="form-control" placeholder="DUPONT" required>
+        </div>
+        <div class="form-group">
+          <label for="prenom" class="form-label">Prénom *</label>
+          <input type="text" id="prenom" name="prenom" class="form-control" placeholder="Jean" required autofocus>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <div class="form-group">
+          <label for="classe" class="form-label">Classe *</label>
+          <input type="text" id="classe" name="classe" class="form-control" placeholder="ex : M1 Informatique" required>
+        </div>
+        <div class="form-group">
+          <label for="departement" class="form-label">Département *</label>
+          <input type="text" id="departement" name="departement" class="form-control" placeholder="ex : Génie Logiciel" required>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="telephone" class="form-label">Numéro de Téléphone *</label>
+        <input type="tel" id="telephone" name="telephone" class="form-control" placeholder="ex : +33 6 12 34 56 78" required>
+      </div>
+
+      <div class="form-group">
+        <label for="email" class="form-label">Adresse E-mail *</label>
+        <input type="email" id="email" name="email" class="form-control" placeholder="jean.dupont@etu.univ.fr" required>
+        <span style="display:block;font-size:.72rem;color:var(--text-muted);margin-top:.25rem;">📩 Votre QR Code d'entrée sera envoyé à cette adresse.</span>
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width:100%;margin-top:.5rem;font-size:1rem;padding:.9rem;">
+        Confirmer mon inscription 🚀
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}
