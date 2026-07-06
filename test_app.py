@@ -153,5 +153,208 @@ class JEProjectTestCase(unittest.TestCase):
         data = response.get_json()
         self.assertEqual(data['status'], 'invalid')
 
+    def test_email_case_insensitivity(self):
+        """Test that registering with emails in different casing acts as a duplicate."""
+        # Log in first
+        self.login('admin', 'adminje')
+        
+        # Create an event
+        self.client.post('/admin/dashboard', data=dict(
+            name='Case Test Event',
+            date='2026-12-31T19:00',
+            location='Salle B',
+            description='Testing email casing.'
+        ), follow_redirects=True)
+        
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM events WHERE name = 'Case Test Event'")
+        event = cursor.fetchone()
+        self.assertIsNotNone(event)
+        event_id = event[0]
+        conn.close()
+
+        # Register participant 1 with uppercase email
+        self.client.post(f'/event/{event_id}/register', data=dict(
+            nom='Smith',
+            prenom='Jane',
+            classe='M2 Info',
+            departement='Genie Logiciel',
+            telephone='0700000000',
+            email='Jane.Smith@Test.com'
+        ), follow_redirects=True)
+        
+        # Verify the participant is registered (email stored as lowercase)
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT email FROM participants WHERE nom = 'Smith'")
+        part = cursor.fetchone()
+        self.assertIsNotNone(part)
+        self.assertEqual(part[0], 'jane.smith@test.com')
+        conn.close()
+
+        # Try registering same email with lowercase casing - should fail/redirect as duplicate
+        response2 = self.client.post(f'/event/{event_id}/register', data=dict(
+            nom='Smith Duo',
+            prenom='Jane',
+            classe='M2 Info',
+            departement='Genie Logiciel',
+            telephone='0700000000',
+            email='jane.smith@test.com'
+        ), follow_redirects=True)
+        
+        self.assertIn(b'Cette adresse email est', response2.data)
+
+    def test_direct_checkin_uncheckin(self):
+        """Test the direct check-in and un-check-in admin endpoints."""
+        # Log in first
+        self.login('admin', 'adminje')
+        
+        # Create an event
+        self.client.post('/admin/dashboard', data=dict(
+            name='Direct Check Event',
+            date='2026-12-31T20:00',
+            location='Salle C',
+            description='Testing direct checkin.'
+        ), follow_redirects=True)
+        
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM events WHERE name = 'Direct Check Event'")
+        event_id = cursor.fetchone()[0]
+        conn.close()
+
+        # Register participant
+        self.client.post(f'/event/{event_id}/register', data=dict(
+            nom='Taylor',
+            prenom='Alex',
+            classe='L3 Info',
+            departement='Securite',
+            telephone='0611111111',
+            email='alex.taylor@test.com'
+        ), follow_redirects=True)
+
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, checked_in FROM participants WHERE nom = 'Taylor'")
+        part = cursor.fetchone()
+        part_id = part[0]
+        checked_in = part[1]
+        self.assertEqual(checked_in, 0)
+        conn.close()
+
+        # Try checkin without admin login (should redirect)
+        self.logout()
+        response = self.client.post(f'/admin/participant/{part_id}/checkin_direct', follow_redirects=True)
+        self.assertIn(b'Veuillez vous connecter', response.data)
+
+        # Log in and check-in
+        self.login('admin', 'adminje')
+        response = self.client.post(f'/admin/participant/{part_id}/checkin_direct', follow_redirects=True)
+        has_valide_msg = (
+            b'valide' in response.data or 
+            b'validation' in response.data or
+            b'success' in response.data or
+            b'Entr' in response.data
+        )
+        self.assertTrue(has_valide_msg)
+
+        # Verify checked_in state is now 1
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT checked_in FROM participants WHERE id = ?", (part_id,))
+        self.assertEqual(cursor.fetchone()[0], 1)
+        conn.close()
+
+        # Direct uncheck-in
+        response = self.client.post(f'/admin/participant/{part_id}/uncheckin_direct', follow_redirects=True)
+        has_annulee_msg = (
+            b'annul' in response.data or
+            b'validation' in response.data or
+            b'Restaurer' in response.data
+        )
+        self.assertTrue(has_annulee_msg)
+
+        # Verify checked_in state is back to 0
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT checked_in FROM participants WHERE id = ?", (part_id,))
+        self.assertEqual(cursor.fetchone()[0], 0)
+        conn.close()
+
+    def test_club_registration(self):
+        """Test the club / association account registration flow."""
+        # Attempt registration with missing fields — should fail
+        response = self.client.post('/admin/register', data=dict(
+            username='',
+            club_name='Club Robotique',
+            email='robot@univ.fr',
+            password='Secure123!'
+        ), follow_redirects=True)
+        self.assertIn(b'obligatoires', response.data)
+
+        # Successful registration
+        response = self.client.post('/admin/register', data=dict(
+            username='club_robot',
+            club_name='Club Robotique',
+            email='robot@univ.fr',
+            password='Secure123!'
+        ), follow_redirects=True)
+        self.assertIn(b'Club Robotique', response.data)
+
+        # Duplicate username/email should fail
+        response = self.client.post('/admin/register', data=dict(
+            username='club_robot',
+            club_name='Club Robotique 2',
+            email='robot2@univ.fr',
+            password='Secure123!'
+        ), follow_redirects=True)
+        self.assertIn('déjà utilisé'.encode('utf-8'), response.data)
+
+        # Login with the new club account
+        response = self.login('club_robot', 'Secure123!')
+        self.assertIn(b'Tableau de Bord', response.data)
+
+    def test_multi_tenant_isolation(self):
+        """Test that clubs can only see and manage their own events."""
+        # Register a second club
+        self.client.post('/admin/register', data=dict(
+            username='club_musique',
+            club_name='Club Musique',
+            email='musique@univ.fr',
+            password='Music456!'
+        ), follow_redirects=True)
+
+        # Log in as default admin and create an event
+        self.login('admin', 'adminje')
+        self.client.post('/admin/dashboard', data=dict(
+            name='Admin Event',
+            date='2027-01-01T10:00',
+            location='Salle A',
+            description='Event by default admin.'
+        ), follow_redirects=True)
+
+        import sqlite3
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM events WHERE name = 'Admin Event'")
+        admin_event_id = cursor.fetchone()[0]
+        conn.close()
+        self.logout()
+
+        # Log in as club_musique and verify they CANNOT see the admin's event
+        self.login('club_musique', 'Music456!')
+        response = self.client.get('/admin/dashboard')
+        self.assertNotIn(b'Admin Event', response.data)
+
+        # Attempt to access the admin's event detail page — should return 403
+        response = self.client.get(f'/admin/event/{admin_event_id}')
+        self.assertEqual(response.status_code, 403)
+
+        # Attempt to delete the admin's event — should return 403
+        response = self.client.post(f'/admin/event/{admin_event_id}/delete', follow_redirects=False)
+        self.assertEqual(response.status_code, 403)
+        self.logout()
+
 if __name__ == '__main__':
     unittest.main()

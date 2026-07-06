@@ -3,54 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}QR Code Manager - Junior Entreprise{% endblock %}</title>
+    <meta name="description" content="Campus QR Event — Plateforme de gestion de billetterie événementielle par QR Code pour clubs et associations universitaires.">
+    <title>{% block title %}Campus QR Event{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block extra_head %}{% endblock %}
     {% block head %}{% endblock %}
 </head>
 <body>
-    <header>
+    <header class="site-header">
         <div class="nav-container">
             <a href="/" class="logo-link">
-                <span class="logo-text">⚡ JE Event QR</span>
+                <span class="logo-icon">⚡</span>
+                <span class="logo-text">Campus QR Event</span>
             </a>
             <nav class="nav-actions">
                 {% if session.get('logged_in') %}
+                    <span class="nav-club-badge">
+                        🏛️ {{ session.get('club_name', session.get('username', 'Admin')) }}
+                    </span>
                     <a href="{{ url_for('admin_dashboard') }}" class="nav-link {% if request.path == url_for('admin_dashboard') %}active{% endif %}">Événements</a>
                     <a href="{{ url_for('scan') }}" class="nav-link {% if request.path == url_for('scan') %}active{% endif %}">Scanner QR</a>
-                    <a href="{{ url_for('admin_logout') }}" class="btn btn-secondary btn-sm" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">Déconnexion</a>
+                    <a href="{{ url_for('admin_logout') }}" class="btn btn-secondary btn-sm">Déconnexion</a>
                 {% else %}
-                    <a href="{{ url_for('admin_login') }}" class="nav-link {% if request.path == url_for('admin_login') %}active{% endif %}">Connexion Admin</a>
+                    <a href="{{ url_for('admin_register') }}" class="nav-link {% if request.path == url_for('admin_register') %}active{% endif %}">Créer un compte</a>
+                    <a href="{{ url_for('admin_login') }}" class="btn btn-primary btn-sm {% if request.path == url_for('admin_login') %}active{% endif %}">Connexion</a>
                 {% endif %}
             </nav>
         </div>
     </header>
 
     <main>
-        <!-- Flash Messages -->
+        <!-- Flash Messages (shown outside register_club.html which handles them itself) -->
+        {% if request.path != url_for('admin_register') %}
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 <div class="flash-container">
                     {% for category, message in messages %}
                         <div class="flash-message flash-{{ category }}">
-                            {% if category == 'success' %}
-                                <span>✅</span>
-                            {% else %}
-                                <span>⚠️</span>
-                            {% endif %}
+                            {% if category == 'success' %}<span>✅</span>{% else %}<span>⚠️</span>{% endif %}
                             <span>{{ message }}</span>
                         </div>
                     {% endfor %}
                 </div>
             {% endif %}
         {% endwith %}
+        {% endif %}
 
         {% block content %}{% endblock %}
     </main>
 
-    <footer>
-        <p>&copy; {{ datetime.now().year if datetime else 2026 }} Junior Entreprise - Tous droits réservés.</p>
+    <footer class="site-footer">
+        <div class="footer-inner">
+            <span class="footer-brand">⚡ Campus QR Event</span>
+            <span class="footer-copy">&copy; {{ datetime.now().year if datetime else 2026 }} — Tous droits réservés.</span>
+        </div>
     </footer>
-    
+
     {% block scripts %}{% endblock %}
 </body>
 </html>

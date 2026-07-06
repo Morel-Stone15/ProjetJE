@@ -1,4 +1,6 @@
 import os
+from dotenv import load_dotenv
+load_dotenv()
 
 import uuid
 import sqlite3
@@ -27,7 +29,8 @@ os.makedirs('static/qrcodes', exist_ok=True)
 os.makedirs('debug_emails', exist_ok=True)
 
 def get_db():
-    conn = sqlite3.connect(DATABASE)
+    db_path = app.config.get('DATABASE', DATABASE)
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
     return conn
@@ -40,18 +43,22 @@ def init_db():
         CREATE TABLE IF NOT EXISTS admins (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL
+            password_hash TEXT NOT NULL,
+            club_name TEXT NOT NULL DEFAULT '',
+            email TEXT NOT NULL DEFAULT ''
         )
     ''')
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            admin_id INTEGER,
             name TEXT NOT NULL,
             date TEXT NOT NULL,
             location TEXT NOT NULL DEFAULT '',
             description TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (admin_id) REFERENCES admins (id) ON DELETE CASCADE
         )
     ''')
     # Migration: add location column if it doesn't exist yet
@@ -59,6 +66,27 @@ def init_db():
         cursor.execute("ALTER TABLE events ADD COLUMN location TEXT NOT NULL DEFAULT ''")
     except Exception:
         pass
+
+    # Migration: add admin_id column if it doesn't exist yet
+    event_cols = [row[1] for row in cursor.execute("PRAGMA table_info(events)").fetchall()]
+    if 'admin_id' not in event_cols:
+        try:
+            cursor.execute("ALTER TABLE events ADD COLUMN admin_id INTEGER REFERENCES admins(id) ON DELETE CASCADE")
+        except Exception:
+            pass
+
+    # Migration: add club_name and email columns to admins if they don't exist yet
+    admin_cols = [row[1] for row in cursor.execute("PRAGMA table_info(admins)").fetchall()]
+    if 'club_name' not in admin_cols:
+        try:
+            cursor.execute("ALTER TABLE admins ADD COLUMN club_name TEXT NOT NULL DEFAULT ''")
+        except Exception:
+            pass
+    if 'email' not in admin_cols:
+        try:
+            cursor.execute("ALTER TABLE admins ADD COLUMN email TEXT NOT NULL DEFAULT ''")
+        except Exception:
+            pass
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS participants (
@@ -76,9 +104,10 @@ def init_db():
             FOREIGN KEY (event_id) REFERENCES events (id) ON DELETE CASCADE
         )
     ''')
-    # Ensure unique email per event
+    # Ensure unique email per event (case-insensitive)
     try:
-        cursor.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_participants_event_email ON participants(event_id, email)')
+        cursor.execute('DROP INDEX IF EXISTS idx_participants_event_email')
+        cursor.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_participants_event_email ON participants(event_id, email COLLATE NOCASE)')
     except Exception:
         pass
 
@@ -104,9 +133,10 @@ def init_db():
                 FOREIGN KEY (event_id) REFERENCES events (id) ON DELETE CASCADE
             )
         ''')
-        # Ensure unique email per event for new table
+        # Ensure unique email per event for new table (case-insensitive)
         try:
-            cursor.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_participants_event_email ON participants(event_id, email)')
+            cursor.execute('DROP INDEX IF EXISTS idx_participants_event_email')
+            cursor.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_participants_event_email ON participants(event_id, email COLLATE NOCASE)')
         except Exception:
             pass
         # Copy rows – map old `name` into `nom` (prenom stays empty for legacy rows)
@@ -134,16 +164,23 @@ def init_db():
         except Exception:
             pass
 
+    # Seed default admin
     cursor.execute("SELECT COUNT(*) FROM admins")
     if cursor.fetchone()[0] == 0:
         default_username = 'admin'
         default_password = 'adminje'
         hashed_password = generate_password_hash(default_password)
         cursor.execute(
-            "INSERT INTO admins (username, password_hash) VALUES (?, ?)",
-            (default_username, hashed_password)
+            "INSERT INTO admins (username, password_hash, club_name, email) VALUES (?, ?, ?, ?)",
+            (default_username, hashed_password, 'Junior Entreprise', 'je@university.edu')
         )
         print(f"\n[DB] Compte admin créé — Identifiant: '{default_username}' | Mot de passe: '{default_password}'\n")
+    else:
+        # Ensure first admin has defaults if empty
+        cursor.execute("UPDATE admins SET club_name = 'Junior Entreprise', email = 'je@university.edu' WHERE id = 1 AND (club_name = '' OR club_name IS NULL)")
+
+    # Associate old events with admin_id = 1
+    cursor.execute("UPDATE events SET admin_id = 1 WHERE admin_id IS NULL")
 
     conn.commit()
     conn.close()
@@ -162,6 +199,7 @@ def format_date(raw_date):
 
 app.jinja_env.globals['format_date'] = format_date
 app.jinja_env.filters['format_date'] = format_date
+app.jinja_env.globals['datetime'] = datetime
 
 def generate_qr_code(token):
     """Generate (or regenerate) the QR code PNG for a ticket token.
@@ -209,6 +247,13 @@ def build_email_html(
     """
     return html
 def send_confirmation_email(prenom, nom, email, event_name, event_date, event_location, token, qr_file_path):
+    import requests
+
+    emailjs_service_id = os.environ.get('EMAILJS_SERVICE_ID', '')
+    emailjs_template_id = os.environ.get('EMAILJS_TEMPLATE_ID', '')
+    emailjs_public_key = os.environ.get('EMAILJS_PUBLIC_KEY', '')
+    emailjs_private_key = os.environ.get('EMAILJS_PRIVATE_KEY', '')
+
     smtp_server = os.environ.get('SMTP_SERVER', '')
     smtp_port = int(os.environ.get('SMTP_PORT', '587'))
     smtp_user = os.environ.get('SMTP_USER', '')
@@ -216,40 +261,181 @@ def send_confirmation_email(prenom, nom, email, event_name, event_date, event_lo
     smtp_sender = os.environ.get('SMTP_SENDER', 'noreply@junior-entreprise.com')
 
     html_content = build_email_html(prenom, nom, event_name, event_date, event_location, token)
+    qr_code_url = f"{request.host_url.rstrip('/')}/static/qrcodes/{token}.png"
 
-    if not smtp_server or not smtp_user or not smtp_password:
-        debug_path = os.path.join('debug_emails', f"email_{token}.html")
-        with open(debug_path, 'w', encoding='utf-8') as f:
-            f.write(html_content)
-        print(f"[EMAIL-DEBUG] SMTP non configuré. E-mail sauvegardé dans {debug_path}")
-        return False
+    # --- Choice A: EmailJS (if configured) ---
+    if emailjs_service_id and emailjs_template_id and emailjs_public_key:
+        payload = {
+            "service_id": emailjs_service_id,
+            "template_id": emailjs_template_id,
+            "user_id": emailjs_public_key,
+            "template_params": {
+                "to_name": f"{prenom} {nom}",
+                "to_email": email,
+                "event_name": event_name,
+                "event_date": format_date(event_date),
+                "event_location": event_location or 'À confirmer',
+                "ticket_id": token,
+                "qr_code_url": qr_code_url,
+                "ticket_web_url": f"{request.host_url.rstrip('/')}/ticket/{token}"
+            }
+        }
+        if emailjs_private_key:
+            payload["accessToken"] = emailjs_private_key
+            
+        try:
+            response = requests.post("https://api.emailjs.com/api/v1.0/email/send", json=payload)
+            if response.status_code == 200:
+                print(f"[EMAILJS] E-mail envoyé avec succès : {response.text}")
+                return True
+            else:
+                print(f"[EMAILJS-ERROR] Status: {response.status_code}, Text: {response.text}")
+                raise Exception(response.text)
+        except Exception as e:
+            print(f"[EMAILJS-ERROR] {e}")
+            debug_path = os.path.join('debug_emails', f"email_{token}_failed.html")
+            local_html = html_content.replace('cid:qrcode_img', f"../static/qrcodes/{token}.png")
+            with open(debug_path, 'w', encoding='utf-8') as f:
+                f.write(local_html + f"\n<!-- ERROR EmailJS: {e} -->")
+            return False
 
-    try:
-        msg = MIMEMultipart('related')
-        msg['Subject'] = f"Confirmation d'inscription : {event_name}"
-        msg['From']    = smtp_sender
-        msg['To']      = email
-        alt = MIMEMultipart('alternative')
-        msg.attach(alt)
-        alt.attach(MIMEText(html_content, 'html', 'utf-8'))
-        with open(qr_file_path, 'rb') as img_f:
-            img = MIMEImage(img_f.read())
-            img.add_header('Content-ID', '<qrcode_img>')
-            img.add_header('Content-Disposition', 'inline', filename=f"qrcode_{token}.png")
-            msg.attach(img)
-        server = smtplib.SMTP(smtp_server, smtp_port)
-        server.starttls()
-        server.login(smtp_user, smtp_password)
-        server.sendmail(smtp_sender, email, msg.as_string())
-        server.quit()
-        print(f"[EMAIL] Envoyé à {email}")
-        return True
-    except Exception as e:
-        print(f"[EMAIL-ERROR] {e}")
-        debug_path = os.path.join('debug_emails', f"email_{token}_failed.html")
-        with open(debug_path, 'w', encoding='utf-8') as f:
-            f.write(html_content + f"\n<!-- ERROR: {e} -->")
-        return False
+    # --- Choice B: SMTP (if configured) ---
+    if smtp_server and smtp_user and smtp_password:
+        try:
+            msg = MIMEMultipart('related')
+            msg['Subject'] = f"Confirmation d'inscription : {event_name}"
+            msg['From']    = smtp_sender
+            msg['To']      = email
+            alt = MIMEMultipart('alternative')
+            msg.attach(alt)
+            alt.attach(MIMEText(html_content, 'html', 'utf-8'))
+            with open(qr_file_path, 'rb') as img_f:
+                img = MIMEImage(img_f.read())
+                img.add_header('Content-ID', '<qrcode_img>')
+                img.add_header('Content-Disposition', 'inline', filename=f"qrcode_{token}.png")
+                msg.attach(img)
+            server = smtplib.SMTP(smtp_server, smtp_port)
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.sendmail(smtp_sender, email, msg.as_string())
+            server.quit()
+            print(f"[EMAIL-SMTP] Envoyé à {email}")
+            return True
+        except Exception as e:
+            print(f"[EMAIL-SMTP-ERROR] {e}")
+            debug_path = os.path.join('debug_emails', f"email_{token}_failed.html")
+            local_html = html_content.replace('cid:qrcode_img', f"../static/qrcodes/{token}.png")
+            with open(debug_path, 'w', encoding='utf-8') as f:
+                f.write(local_html + f"\n<!-- ERROR SMTP: {e} -->")
+            return False
+
+    # --- Choice C: Fallback Local Debug File ---
+    debug_path = os.path.join('debug_emails', f"email_{token}.html")
+    local_html = html_content.replace('cid:qrcode_img', f"../static/qrcodes/{token}.png")
+    with open(debug_path, 'w', encoding='utf-8') as f:
+        f.write(local_html)
+    print(f"[EMAIL-DEBUG] SMTP/EmailJS non configurés. E-mail sauvegardé dans {debug_path}")
+    return False
+
+def build_club_welcome_html(club_name, username):
+    html = f"""
+    <html>
+      <body style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #1e293b; background-color: #f8fafc; padding: 20px;">
+        <div style="max-width: 600px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0;">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <span style="font-size: 24px; font-weight: bold; color: #3b82f6;">⚡ Campus QR Event</span>
+          </div>
+          <h2 style="color: #0f172a; font-size: 20px; font-weight: 700; margin-bottom: 16px; text-align: center;">Bienvenue sur Campus QR Event !</h2>
+          <p>Bonjour <strong>{club_name}</strong>,</p>
+          <p>Le compte de votre association/club a été créé avec succès sur la plateforme <strong>Campus QR Event</strong>.</p>
+          <div style="background: #f1f5f9; border-radius: 8px; padding: 15px; margin: 20px 0; border: 1px solid #e2e8f0;">
+            <p style="margin: 0;">👤 <strong>Identifiant de connexion :</strong> <code style="background:#e2e8f0; padding:2px 6px; border-radius:4px;">{username}</code></p>
+          </div>
+          <p>Vous pouvez dès à présent vous connecter pour créer vos événements, générer des QR Codes d'accès et suivre le check-in de vos participants en temps réel.</p>
+          <hr style="border:0;border-top:1px solid #e2e8f0;margin:30px 0;">
+          <p style="font-size:12px;color:#64748b;text-align:center;margin:0;">
+            Cet e-mail est généré automatiquement. Ne pas répondre.
+          </p>
+        </div>
+      </body>
+    </html>
+    """
+    return html
+
+def send_club_registration_email(club_name, email, username):
+    import requests
+
+    emailjs_service_id = os.environ.get('EMAILJS_SERVICE_ID', '')
+    emailjs_welcome_template_id = os.environ.get('EMAILJS_WELCOME_TEMPLATE_ID', '') or os.environ.get('EMAILJS_TEMPLATE_ID', '')
+    emailjs_public_key = os.environ.get('EMAILJS_PUBLIC_KEY', '')
+    emailjs_private_key = os.environ.get('EMAILJS_PRIVATE_KEY', '')
+
+    smtp_server = os.environ.get('SMTP_SERVER', '')
+    smtp_port = int(os.environ.get('SMTP_PORT', '587'))
+    smtp_user = os.environ.get('SMTP_USER', '')
+    smtp_password = os.environ.get('SMTP_PASSWORD', '')
+    smtp_sender = os.environ.get('SMTP_SENDER', 'noreply@junior-entreprise.com')
+
+    html_content = build_club_welcome_html(club_name, username)
+
+    # --- Choice A: EmailJS (if configured) ---
+    if emailjs_service_id and emailjs_welcome_template_id and emailjs_public_key:
+        payload = {
+            "service_id": emailjs_service_id,
+            "template_id": emailjs_welcome_template_id,
+            "user_id": emailjs_public_key,
+            "template_params": {
+                "to_name": club_name,
+                "to_email": email,
+                "username": username
+            }
+        }
+        if emailjs_private_key:
+            payload["accessToken"] = emailjs_private_key
+            
+        try:
+            response = requests.post("https://api.emailjs.com/api/v1.0/email/send", json=payload)
+            if response.status_code == 200:
+                print(f"[EMAILJS-WELCOME] E-mail envoyé avec succès : {response.text}")
+                return True
+            else:
+                print(f"[EMAILJS-WELCOME-ERROR] Status: {response.status_code}, Text: {response.text}")
+                raise Exception(response.text)
+        except Exception as e:
+            print(f"[EMAILJS-WELCOME-ERROR] {e}")
+            debug_path = os.path.join('debug_emails', f"welcome_{username}_failed.html")
+            with open(debug_path, 'w', encoding='utf-8') as f:
+                f.write(html_content + f"\n<!-- ERROR EmailJS: {e} -->")
+            return False
+
+    # --- Choice B: SMTP (if configured) ---
+    if smtp_server and smtp_user and smtp_password:
+        try:
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = "Confirmation d'ouverture de compte Club"
+            msg['From']    = smtp_sender
+            msg['To']      = email
+            msg.attach(MIMEText(html_content, 'html', 'utf-8'))
+            server = smtplib.SMTP(smtp_server, smtp_port)
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.sendmail(smtp_sender, email, msg.as_string())
+            server.quit()
+            print(f"[EMAIL-WELCOME-SMTP] Envoyé à {email}")
+            return True
+        except Exception as e:
+            print(f"[EMAIL-WELCOME-SMTP-ERROR] {e}")
+            debug_path = os.path.join('debug_emails', f"welcome_{username}_failed.html")
+            with open(debug_path, 'w', encoding='utf-8') as f:
+                f.write(html_content + f"\n<!-- ERROR SMTP: {e} -->")
+            return False
+
+    # --- Choice C: Fallback Local Debug File ---
+    debug_path = os.path.join('debug_emails', f"welcome_{username}.html")
+    with open(debug_path, 'w', encoding='utf-8') as f:
+        f.write(html_content)
+    print(f"[EMAIL-WELCOME-DEBUG] E-mail de bienvenue sauvegardé dans {debug_path}")
+    return False
 
 def login_required(f):
     import functools
@@ -266,7 +452,12 @@ def login_required(f):
 @app.route('/')
 def index():
     conn   = get_db()
-    events = conn.execute("SELECT * FROM events ORDER BY date DESC").fetchall()
+    events = conn.execute("""
+        SELECT e.*, a.club_name as organizer_name
+        FROM events e
+        LEFT JOIN admins a ON e.admin_id = a.id
+        ORDER BY e.date DESC
+    """).fetchall()
     conn.close()
     return render_template('index.html', events=events)
 
@@ -284,7 +475,7 @@ def event_register(event_id):
         classe      = request.form.get('classe', '').strip()
         departement = request.form.get('departement', '').strip()
         telephone   = request.form.get('telephone', '').strip()
-        email       = request.form.get('email', '').strip()
+        email       = request.form.get('email', '').strip().lower()
 
         if not all([nom, prenom, classe, departement, telephone, email]):
             flash("Tous les champs sont obligatoires.", "error")
@@ -341,7 +532,13 @@ def register_success(token):
     conn.close()
     if not participant:
         return "Inscription introuvable", 404
-    return render_template('register_success.html', participant=participant)
+    return render_template(
+        'register_success.html',
+        participant=participant,
+        emailjs_public_key=os.environ.get('EMAILJS_PUBLIC_KEY', ''),
+        emailjs_service_id=os.environ.get('EMAILJS_SERVICE_ID', ''),
+        emailjs_template_id=os.environ.get('EMAILJS_TEMPLATE_ID', '')
+    )
 
 @app.route('/ticket/<string:token>')
 def ticket_view(token):
@@ -368,6 +565,60 @@ def admin_index():
         return redirect(url_for('admin_dashboard'))
     return redirect(url_for('admin_login'))
 
+@app.route('/admin/register', methods=['GET', 'POST'])
+def admin_register():
+    if session.get('logged_in'):
+        return redirect(url_for('admin_dashboard'))
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        club_name = request.form.get('club_name', '').strip()
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '').strip()
+
+        if not all([username, club_name, email, password]):
+            flash("Tous les champs sont obligatoires.", "error")
+            return render_template('register_club.html')
+
+        conn = get_db()
+        # Check if username or email already exists
+        existing_user = conn.execute(
+            "SELECT 1 FROM admins WHERE username = ? OR email = ?",
+            (username, email)
+        ).fetchone()
+        if existing_user:
+            flash("Cet identifiant ou cet e-mail est déjà utilisé.", "error")
+            conn.close()
+            return render_template('register_club.html')
+
+        try:
+            hashed_pwd = generate_password_hash(password)
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO admins (username, password_hash, club_name, email) VALUES (?, ?, ?, ?)",
+                (username, hashed_pwd, club_name, email)
+            )
+            conn.commit()
+            conn.close()
+
+            # Render success page — the welcome e-mail is triggered from the browser
+            # via the EmailJS SDK to bypass server-side API restrictions.
+            return render_template(
+                'register_club_success.html',
+                club_name=club_name,
+                email=email,
+                username=username,
+                emailjs_public_key=os.environ.get('EMAILJS_PUBLIC_KEY', ''),
+                emailjs_service_id=os.environ.get('EMAILJS_SERVICE_ID', ''),
+                emailjs_welcome_template_id=os.environ.get('EMAILJS_WELCOME_TEMPLATE_ID', ''),
+                emailjs_ticket_template_id=os.environ.get('EMAILJS_TEMPLATE_ID', ''),
+            )
+        except Exception as e:
+            conn.close()
+            flash("Une erreur est survenue lors de l'inscription.", "error")
+            print(f"[REGISTER-ERROR] {e}")
+
+    return render_template('register_club.html')
+
 @app.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
     if session.get('logged_in'):
@@ -381,6 +632,8 @@ def admin_login():
         if admin and check_password_hash(admin['password_hash'], password):
             session['logged_in'] = True
             session['username']  = username
+            session['admin_id']  = admin['id']
+            session['club_name']  = admin['club_name'] or username
             flash("Connexion réussie.", "success")
             return redirect(url_for('admin_dashboard'))
         flash("Identifiants incorrects.", "error")
@@ -405,8 +658,8 @@ def admin_dashboard():
             flash("Le nom et la date sont requis.", "error")
         else:
             conn.execute(
-                "INSERT INTO events (name, date, location, description) VALUES (?, ?, ?, ?)",
-                (name, date, location, description)
+                "INSERT INTO events (admin_id, name, date, location, description) VALUES (?, ?, ?, ?, ?)",
+                (session['admin_id'], name, date, location, description)
             )
             conn.commit()
             flash("Événement créé avec succès.", "success")
@@ -418,9 +671,10 @@ def admin_dashboard():
                COALESCE(SUM(p.checked_in), 0) as checked_in_count
         FROM events e
         LEFT JOIN participants p ON e.id = p.event_id
+        WHERE e.admin_id = ?
         GROUP BY e.id
         ORDER BY e.date DESC
-    """).fetchall()
+    """, (session['admin_id'],)).fetchall()
     conn.close()
     return render_template('dashboard.html', events=events)
 
@@ -433,13 +687,17 @@ def event_detail(event_id):
         conn.close()
         return "Événement introuvable", 404
 
+    if event['admin_id'] != session['admin_id']:
+        conn.close()
+        return "Accès interdit : Cet événement appartient à un autre club.", 403
+
     if request.method == 'POST':
         nom         = request.form.get('nom', '').strip()
         prenom      = request.form.get('prenom', '').strip()
         classe      = request.form.get('classe', '').strip()
         departement = request.form.get('departement', '').strip()
         telephone   = request.form.get('telephone', '').strip()
-        email       = request.form.get('email', '').strip()
+        email       = request.form.get('email', '').strip().lower()
 
         if not all([nom, prenom, classe, departement, telephone, email]):
             flash("Tous les champs sont obligatoires.", "error")
@@ -489,6 +747,10 @@ def event_detail(event_id):
 @login_required
 def delete_event(event_id):
     conn = get_db()
+    event = conn.execute("SELECT admin_id FROM events WHERE id = ?", (event_id,)).fetchone()
+    if not event or event['admin_id'] != session['admin_id']:
+        conn.close()
+        return "Accès interdit : Cet événement appartient à un autre club.", 403
     conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
     conn.commit()
     conn.close()
@@ -499,8 +761,16 @@ def delete_event(event_id):
 @login_required
 def delete_participant(part_id):
     conn        = get_db()
-    participant = conn.execute("SELECT event_id FROM participants WHERE id = ?", (part_id,)).fetchone()
+    participant = conn.execute(
+        """SELECT p.event_id, e.admin_id
+           FROM participants p JOIN events e ON p.event_id = e.id
+           WHERE p.id = ?""",
+        (part_id,)
+    ).fetchone()
     if participant:
+        if participant['admin_id'] != session['admin_id']:
+            conn.close()
+            return "Accès interdit : Cet événement appartient à un autre club.", 403
         event_id = participant['event_id']
         conn.execute("DELETE FROM participants WHERE id = ?", (part_id,))
         conn.commit()
@@ -516,15 +786,21 @@ def resend_ticket(part_id):
     """Re-send the confirmation e-mail (or re-save to debug_emails) for a participant."""
     conn = get_db()
     row  = conn.execute(
-        """SELECT p.*, e.name as event_name, e.date as event_date, e.location as event_location
+        """SELECT p.*, e.name as event_name, e.date as event_date, e.location as event_location, e.admin_id
            FROM participants p JOIN events e ON p.event_id = e.id
            WHERE p.id = ?""",
         (part_id,)
     ).fetchone()
-    conn.close()
     if not row:
+        conn.close()
         flash("Participant introuvable.", "error")
         return redirect(url_for('admin_dashboard'))
+
+    if row['admin_id'] != session['admin_id']:
+        conn.close()
+        return "Accès interdit : Cet événement appartient à un autre club.", 403
+
+    conn.close()
 
     qr_path = f"static/qrcodes/{row['ticket_token']}.png"
     if not os.path.exists(qr_path):
@@ -564,7 +840,7 @@ def api_checkin():
 
     conn        = get_db()
     participant = conn.execute(
-        """SELECT p.*, e.name as event_name
+        """SELECT p.*, e.name as event_name, e.admin_id
            FROM participants p JOIN events e ON p.event_id = e.id
            WHERE p.ticket_token = ?""",
         (token,)
@@ -573,6 +849,10 @@ def api_checkin():
     if not participant:
         conn.close()
         return jsonify({'status': 'invalid', 'message': 'QR code invalide ou ticket inconnu.'})
+
+    if participant['admin_id'] != session['admin_id']:
+        conn.close()
+        return jsonify({'status': 'invalid', 'message': 'Accès refusé : Ce ticket appartient à un autre club.'})
 
     full_name = f"{participant['prenom']} {participant['nom']}"
 
@@ -599,6 +879,65 @@ def api_checkin():
         'event': participant['event_name'],
         'message': f"Entrée validée pour {full_name}."
     })
+
+@app.route('/admin/participant/<int:part_id>/checkin_direct', methods=['POST'])
+@login_required
+def checkin_direct(part_id):
+    """Directly checks in a participant by ID (for admin mobile scan or link click)."""
+    conn = get_db()
+    participant = conn.execute(
+        """SELECT p.ticket_token, p.nom, p.prenom, e.admin_id
+           FROM participants p JOIN events e ON p.event_id = e.id
+           WHERE p.id = ?""",
+        (part_id,)
+    ).fetchone()
+    if not participant:
+        conn.close()
+        flash("Participant introuvable.", "error")
+        return redirect(url_for('admin_dashboard'))
+        
+    if participant['admin_id'] != session['admin_id']:
+        conn.close()
+        return "Accès interdit : Cet événement appartient à un autre club.", 403
+    
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    conn.execute(
+        "UPDATE participants SET checked_in = 1, checked_in_at = ? WHERE id = ?",
+        (now_str, part_id)
+    )
+    conn.commit()
+    conn.close()
+    flash(f"Entrée validée avec succès pour {participant['prenom']} {participant['nom']}.", "success")
+    return redirect(url_for('ticket_view', token=participant['ticket_token']))
+
+@app.route('/admin/participant/<int:part_id>/uncheckin_direct', methods=['POST'])
+@login_required
+def uncheckin_direct(part_id):
+    """Cancels/reverts the check-in of a participant by ID."""
+    conn = get_db()
+    participant = conn.execute(
+        """SELECT p.ticket_token, p.nom, p.prenom, e.admin_id
+           FROM participants p JOIN events e ON p.event_id = e.id
+           WHERE p.id = ?""",
+        (part_id,)
+    ).fetchone()
+    if not participant:
+        conn.close()
+        flash("Participant introuvable.", "error")
+        return redirect(url_for('admin_dashboard'))
+        
+    if participant['admin_id'] != session['admin_id']:
+        conn.close()
+        return "Accès interdit : Cet événement appartient à un autre club.", 403
+    
+    conn.execute(
+        "UPDATE participants SET checked_in = 0, checked_in_at = NULL WHERE id = ?",
+        (part_id,)
+    )
+    conn.commit()
+    conn.close()
+    flash(f"Validation annulée pour {participant['prenom']} {participant['nom']}.", "success")
+    return redirect(url_for('ticket_view', token=participant['ticket_token']))
 
 def reset_database_and_qrcodes():
     """Delete the SQLite DB file and all generated QR code images, then re‑initialise the schema."""

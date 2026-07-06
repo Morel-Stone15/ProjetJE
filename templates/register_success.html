@@ -1,57 +1,199 @@
 {% extends 'base.html' %}
-{% block title %}Inscription Confirmée - {{ participant.event_name }}{% endblock %}
+{% block title %}Inscription Confirmée — {{ participant.event_name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .succ-wrap {
+    display: flex; justify-content: center; align-items: flex-start;
+    min-height: 80vh; padding: 2rem 1rem;
+  }
+  .succ-card {
+    width: 100%; max-width: 520px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.09);
+    backdrop-filter: blur(20px);
+    border-radius: 22px;
+    padding: 2.5rem 2rem;
+    box-shadow: 0 20px 50px rgba(0,0,0,.4);
+    animation: fadeUp .55s cubic-bezier(.22,1,.36,1) both;
+  }
+  @keyframes fadeUp {
+    from { opacity:0; transform: translateY(20px); }
+    to   { opacity:1; transform: none; }
+  }
+
+  .succ-icon {
+    width: 64px; height: 64px; border-radius: 50%;
+    background: rgba(16,185,129,.12); border: 2px solid rgba(16,185,129,.3);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 1.75rem; margin-bottom: 1rem;
+  }
+
+  .succ-title { font-size: 1.6rem; font-weight: 800; color: #10b981; margin: 0 0 .4rem; }
+  .succ-sub   { font-size: .925rem; color: var(--text-secondary); margin: 0 0 1.5rem; line-height: 1.6; }
+
+  .event-meta {
+    background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.07);
+    border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem;
+  }
+  .event-meta .ev-name { font-weight: 700; font-size: 1.05rem; margin-bottom: .4rem; }
+  .event-meta .ev-detail { color: var(--text-secondary); font-size: .85rem; display: flex; flex-direction: column; gap: .2rem; }
+
+  .qr-wrap {
+    background: #fff; padding: 1.2rem; border-radius: 16px;
+    display: inline-block; margin: 1.5rem 0; box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  }
+  .qr-wrap img { width: 190px; height: 190px; display: block; }
+
+  /* E-mail status */
+  .ebox {
+    border-radius: 11px; padding: .85rem 1rem;
+    margin-bottom: 1.5rem; font-size: .84rem; font-weight: 500;
+    display: flex; align-items: flex-start; gap: .6rem; text-align: left;
+    transition: background .3s, border .3s, color .3s;
+  }
+  .ebox.pending { background: rgba(99,102,241,.08); border: 1px solid rgba(99,102,241,.18); color: #a5b4fc; }
+  .ebox.ok      { background: rgba(16,185,129,.1);  border: 1px solid rgba(16,185,129,.25); color: #6ee7b7; }
+  .ebox.warn    { background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.2);  color: #fcd34d; }
+  .ebox.err     { background: rgba(239,68,68,.09);  border: 1px solid rgba(239,68,68,.2);   color: #fca5a5; }
+  .ebox-icon { font-size: 1rem; flex-shrink: 0; margin-top: .05rem; }
+  .ebox-body { flex: 1; }
+  .ebox-body small { display: block; font-size: .76rem; opacity: .75; margin-top: .2rem; font-weight: 400; }
+
+  .spin { display:inline-block; width:13px; height:13px; border:2px solid rgba(165,180,252,.3); border-top-color:#818cf8; border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; margin-right:.35rem; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  .cta-row { display: flex; gap: .85rem; justify-content: center; flex-wrap: wrap; margin-top: .5rem; }
+
+  details.dlog { margin-top: 1rem; text-align: left; }
+  details.dlog summary { font-size:.72rem; color:var(--text-muted); cursor:pointer; list-style:none; }
+  details.dlog summary::-webkit-details-marker { display:none; }
+  #dlogBody { font-size:.71rem; color:var(--text-muted); background:rgba(0,0,0,.2); border-radius:8px; padding:.7rem; margin-top:.4rem; font-family:monospace; white-space:pre-wrap; max-height:150px; overflow-y:auto; }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="register-wrapper">
-  <div class="card register-card">
-    <div class="success-card-content">
+<div class="succ-wrap">
+  <div class="succ-card" style="text-align:center;">
 
-      <div class="success-icon">🎉</div>
+    <div class="succ-icon">🎉</div>
+    <h1 class="succ-title">Inscription réussie !</h1>
+    <p class="succ-sub">
+      Bienvenue <strong>{{ participant.prenom }} {{ participant.nom }}</strong> !<br>
+      Votre place est réservée — voici votre billet QR.
+    </p>
 
-      <h1 style="font-size:1.75rem;font-weight:800;margin-bottom:.5rem;color:var(--success);">
-        Inscription Réussie !
-      </h1>
-      <p style="color:var(--text-secondary);font-size:.95rem;margin-bottom:1.5rem;">
-        Bienvenue <strong>{{ participant.prenom }} {{ participant.nom }}</strong> !<br>
-        Votre place est réservée pour cet événement.
-      </p>
-
-      <!-- Event recap -->
-      <div style="background:rgba(255,255,255,.04);border:1px solid var(--border-color);border-radius:var(--radius-md);padding:1rem;text-align:left;margin-bottom:1.5rem;">
-        <div style="font-weight:700;font-size:1.05rem;margin-bottom:.5rem;">{{ participant.event_name }}</div>
-        <div style="color:var(--text-secondary);font-size:.875rem;display:flex;flex-direction:column;gap:.25rem;">
-          <span>📅 {{ format_date(participant.event_date) }}</span>
-          <span>📍 {{ participant.event_location }}</span>
-          <span>🏫 {{ participant.classe }} — {{ participant.departement }}</span>
-        </div>
+    <div class="event-meta" style="text-align:left;">
+      <div class="ev-name">{{ participant.event_name }}</div>
+      <div class="ev-detail">
+        <span>📅 {{ format_date(participant.event_date) }}</span>
+        {% if participant.event_location %}<span>📍 {{ participant.event_location }}</span>{% endif %}
+        <span>🏫 {{ participant.classe }} — {{ participant.departement }}</span>
       </div>
-
-      <p style="color:var(--text-secondary);font-size:.9rem;margin-bottom:.5rem;">
-        📩 Un e-mail de confirmation contenant votre QR Code a été envoyé à <strong>{{ participant.email }}</strong>.<br>
-        <span style="color:var(--text-muted);font-size:.8rem;">Pensez à vérifier vos courriers indésirables.</span>
-      </p>
-
-      <!-- QR Code -->
-      <div class="success-qr-container">
-        <img src="/static/qrcodes/{{ participant.ticket_token }}.png" alt="QR Code d'entrée">
-      </div>
-
-      <p style="color:var(--text-muted);font-size:.8rem;margin-top:-.75rem;margin-bottom:1.5rem;">
-        Présentez ce QR Code à l'entrée de l'événement.
-      </p>
-
-      <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;">
-        <a href="/static/qrcodes/{{ participant.ticket_token }}.png"
-           download="Billet_{{ participant.event_name|replace(' ','_') }}.png"
-           class="btn btn-primary">
-          💾 Télécharger mon billet
-        </a>
-        <a href="{{ url_for('index') }}" class="btn btn-secondary">
-          Voir d'autres événements
-        </a>
-      </div>
-
     </div>
+
+    <!-- QR Code -->
+    <div class="qr-wrap">
+      <img src="/static/qrcodes/{{ participant.ticket_token }}.png" alt="QR Code d'entrée">
+    </div>
+    <p style="color:var(--text-muted);font-size:.8rem;margin-top:-.75rem;margin-bottom:1.5rem;">
+      Présentez ce QR Code à l'entrée de l'événement
+    </p>
+
+    <!-- E-mail status -->
+    <div class="ebox pending" id="eBox">
+      <span class="ebox-icon"><span class="spin"></span></span>
+      <div class="ebox-body">
+        <span id="eMsg">Envoi de votre billet par e-mail en cours…</span>
+        <small id="eSub"></small>
+      </div>
+    </div>
+
+    <div class="cta-row">
+      <a href="/static/qrcodes/{{ participant.ticket_token }}.png"
+         download="Billet_{{ participant.event_name|replace(' ','_') }}.png"
+         class="btn btn-primary">
+        💾 Télécharger le billet
+      </a>
+      <a href="{{ url_for('index') }}" class="btn btn-secondary">
+        Voir d'autres événements
+      </a>
+    </div>
+
+    <details class="dlog">
+      <summary>🔧 Détails e-mail (cliquer)</summary>
+      <div id="dlogBody">Chargement…</div>
+    </details>
+
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script>
+(function () {
+  const PUBLIC_KEY  = {{ emailjs_public_key  | tojson }};
+  const SERVICE_ID  = {{ emailjs_service_id  | tojson }};
+  const TEMPLATE_ID = {{ emailjs_template_id | tojson }};
+
+  const eBox = document.getElementById('eBox');
+  const eMsg = document.getElementById('eMsg');
+  const eSub = document.getElementById('eSub');
+  const dlog = document.getElementById('dlogBody');
+
+  function log(t) { dlog.textContent += '\n' + new Date().toISOString().slice(11,19) + ' ' + t; }
+  function setBox(cls, icon, msg, sub) {
+    eBox.className = 'ebox ' + cls;
+    eBox.querySelector('.ebox-icon').innerHTML = icon;
+    eMsg.innerHTML = msg;
+    eSub.innerHTML = sub || '';
+  }
+
+  log('PUBLIC_KEY  : ' + (PUBLIC_KEY  ? PUBLIC_KEY.slice(0,6)+'…'  : '⚠ MANQUANT'));
+  log('SERVICE_ID  : ' + (SERVICE_ID  || '⚠ MANQUANT'));
+  log('TEMPLATE_ID : ' + (TEMPLATE_ID || '⚠ MANQUANT'));
+
+  if (!PUBLIC_KEY || !SERVICE_ID || !TEMPLATE_ID) {
+    setBox('warn', '⚠️',
+      'E-mail non envoyé — configuration EmailJS incomplète.',
+      'Ajoutez <code>EMAILJS_PUBLIC_KEY</code>, <code>EMAILJS_SERVICE_ID</code> et <code>EMAILJS_TEMPLATE_ID</code> dans le fichier <code>.env</code>.'
+    );
+    log('ABORT: clé(s) manquante(s).');
+    return;
+  }
+
+  emailjs.init(PUBLIC_KEY);
+  log('EmailJS initialisé — envoi en cours…');
+
+  const qrUrl = window.location.origin + '/static/qrcodes/{{ participant.ticket_token }}.png';
+
+  emailjs.send(SERVICE_ID, TEMPLATE_ID, {
+    to_name:        '{{ participant.prenom }} {{ participant.nom }}',
+    to_email:       '{{ participant.email }}',
+    event_name:     {{ participant.event_name     | tojson }},
+    event_date:     '{{ participant.event_date | format_date }}',
+    event_location: {{ (participant.event_location or 'À confirmer') | tojson }},
+    ticket_id:      '{{ participant.ticket_token }}',
+    qr_code_url:    qrUrl,
+  })
+  .then(function (res) {
+    log('Succès : ' + res.status + ' ' + res.text);
+    setBox('ok', '✅',
+      'Billet envoyé à <strong>{{ participant.email }}</strong>',
+      'Vérifiez votre boîte de réception (et les spams).'
+    );
+  })
+  .catch(function (err) {
+    log('ERREUR : ' + JSON.stringify(err));
+    const hint = (err && err.text)
+      ? err.text
+      : 'Vérifiez que votre template EmailJS utilise bien les variables <code>{{to_email}}</code>, <code>{{to_name}}</code>, etc.';
+    setBox('err', '⚠️',
+      'Billet QR disponible sur cette page, mais l\'e-mail n\'a pas pu être envoyé.',
+      hint
+    );
+  });
+})();
+</script>
 {% endblock %}

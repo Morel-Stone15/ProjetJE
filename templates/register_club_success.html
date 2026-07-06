@@ -1,0 +1,264 @@
+{% extends 'base.html' %}
+
+{% block title %}Compte créé — Campus QR Event{% endblock %}
+
+{% block extra_head %}
+<style>
+  .success-bg {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    background:
+      radial-gradient(ellipse 80% 60% at 25% 10%, rgba(16, 185, 129, 0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 70% 50% at 80% 90%, rgba(99, 102, 241, 0.12) 0%, transparent 60%),
+      var(--bg-primary);
+  }
+
+  .success-card {
+    width: 100%;
+    max-width: 500px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    backdrop-filter: blur(24px);
+    border-radius: 24px;
+    padding: 2.75rem 2.25rem;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.45);
+    text-align: center;
+    animation: cardIn .6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes cardIn {
+    from { opacity: 0; transform: translateY(28px) scale(0.97); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .check-ring {
+    width: 72px; height: 72px;
+    border-radius: 50%;
+    background: rgba(16, 185, 129, 0.12);
+    border: 2px solid rgba(16, 185, 129, 0.35);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    margin-bottom: 1.25rem;
+    animation: popIn .5s .3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  @keyframes popIn {
+    from { transform: scale(0.5); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+  }
+
+  .success-title { font-size: 1.6rem; font-weight: 800; color: var(--text-primary); margin: 0 0 .5rem; letter-spacing: -.4px; }
+  .success-subtitle { font-size: .95rem; color: var(--text-secondary); margin: 0 0 1.75rem; line-height: 1.6; }
+
+  .info-box {
+    background: rgba(99, 102, 241, 0.07);
+    border: 1px solid rgba(99, 102, 241, 0.18);
+    border-radius: 14px;
+    padding: 1.1rem 1.25rem;
+    margin-bottom: 1.5rem;
+    text-align: left;
+  }
+  .info-row {
+    display: flex; align-items: center; gap: .6rem;
+    font-size: .875rem; color: var(--text-secondary);
+    padding: .35rem 0;
+  }
+  .info-row:not(:last-child) { border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .info-row strong { color: var(--text-primary); font-weight: 600; }
+
+  /* E-mail status box */
+  .email-box {
+    border-radius: 12px;
+    padding: .9rem 1.1rem;
+    margin-bottom: 1.5rem;
+    font-size: .85rem;
+    font-weight: 500;
+    display: flex; align-items: flex-start; gap: .65rem;
+    text-align: left;
+    transition: background .3s, border .3s;
+  }
+  .email-box.pending {
+    background: rgba(99,102,241,.08); border: 1px solid rgba(99,102,241,.2); color: #a5b4fc;
+  }
+  .email-box.ok {
+    background: rgba(16,185,129,.1); border: 1px solid rgba(16,185,129,.25); color: #6ee7b7;
+  }
+  .email-box.warn {
+    background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.2); color: #fcd34d;
+  }
+  .email-box.err {
+    background: rgba(239,68,68,.09); border: 1px solid rgba(239,68,68,.2); color: #fca5a5;
+  }
+  .email-box-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: .05rem; }
+  .email-box-body { flex: 1; }
+  .email-box-body small { display: block; font-size: .77rem; opacity: .75; margin-top: .25rem; font-weight: 400; }
+
+  /* spinner */
+  .spin {
+    display: inline-block; width: 14px; height: 14px;
+    border: 2px solid rgba(165,180,252,.35);
+    border-top-color: #818cf8;
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    vertical-align: middle;
+    margin-right: .4rem;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .btn-login {
+    display: inline-flex; align-items: center; gap: .5rem;
+    padding: .82rem 1.75rem; border-radius: 12px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff; font-size: .95rem; font-weight: 700;
+    text-decoration: none;
+    transition: transform .2s, box-shadow .2s;
+    box-shadow: 0 6px 18px rgba(99,102,241,0.4);
+    letter-spacing: .02em;
+  }
+  .btn-login:hover { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(99,102,241,0.55); }
+
+  /* debug log (collapsed by default) */
+  details.debug-log { margin-top: 1rem; text-align: left; }
+  details.debug-log summary {
+    font-size: .75rem; color: var(--text-muted); cursor: pointer;
+    list-style: none; padding: .3rem 0;
+  }
+  details.debug-log summary::-webkit-details-marker { display: none; }
+  #debugContent {
+    font-size: .72rem; color: var(--text-muted);
+    background: rgba(0,0,0,.2); border-radius: 8px;
+    padding: .75rem; margin-top: .4rem;
+    font-family: monospace; white-space: pre-wrap; max-height: 160px; overflow-y: auto;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="success-bg">
+  <div class="success-card">
+
+    <div class="check-ring">✅</div>
+    <h1 class="success-title">Compte créé !</h1>
+    <p class="success-subtitle">
+      Bienvenue sur <strong>Campus QR Event</strong>,<br>
+      <strong>{{ club_name }}</strong> est maintenant enregistré sur la plateforme.
+    </p>
+
+    <div class="info-box">
+      <div class="info-row"><span>🏛️</span><span>Club : <strong>{{ club_name }}</strong></span></div>
+      <div class="info-row"><span>👤</span><span>Identifiant : <strong>{{ username }}</strong></span></div>
+      <div class="info-row"><span>✉️</span><span>E-mail : <strong>{{ email }}</strong></span></div>
+    </div>
+
+    <!-- Dynamic e-mail status -->
+    <div class="email-box pending" id="emailBox">
+      <span class="email-box-icon"><span class="spin"></span></span>
+      <div class="email-box-body">
+        <span id="emailMsg">Envoi de l'e-mail de bienvenue en cours…</span>
+        <small id="emailSub"></small>
+      </div>
+    </div>
+
+    <a href="{{ url_for('admin_login') }}" class="btn-login" id="loginBtn">
+      Se connecter →
+    </a>
+
+    <!-- Collapsible debug log -->
+    <details class="debug-log">
+      <summary>🔧 Détails techniques (cliquer pour afficher)</summary>
+      <div id="debugContent">Chargement…</div>
+    </details>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script>
+(function () {
+  const PUBLIC_KEY      = {{ emailjs_public_key | tojson }};
+  const SERVICE_ID      = {{ emailjs_service_id | tojson }};
+  const WELCOME_TMPL    = {{ emailjs_welcome_template_id | tojson }};
+  const TICKET_TMPL     = {{ emailjs_ticket_template_id | tojson }};
+
+  // Use dedicated welcome template if available, else fall back to ticket template
+  const TEMPLATE_ID = WELCOME_TMPL || TICKET_TMPL;
+
+  const club    = {{ club_name | tojson }};
+  const email   = {{ email | tojson }};
+  const uname   = {{ username | tojson }};
+
+  const boxEl  = document.getElementById('emailBox');
+  const msgEl  = document.getElementById('emailMsg');
+  const subEl  = document.getElementById('emailSub');
+  const dbgEl  = document.getElementById('debugContent');
+
+  function log(line) {
+    dbgEl.textContent += '\n' + new Date().toISOString().slice(11,19) + ' ' + line;
+  }
+
+  function setBox(type, icon, msg, sub) {
+    boxEl.className = 'email-box ' + type;
+    boxEl.querySelector('.email-box-icon').innerHTML = icon;
+    msgEl.innerHTML  = msg;
+    subEl.innerHTML  = sub || '';
+  }
+
+  log('PUBLIC_KEY  : ' + (PUBLIC_KEY  ? PUBLIC_KEY.slice(0,6)+'…'  : '⚠ MANQUANT'));
+  log('SERVICE_ID  : ' + (SERVICE_ID  || '⚠ MANQUANT'));
+  log('TEMPLATE_ID : ' + (TEMPLATE_ID || '⚠ MANQUANT'));
+  log('To email    : ' + email);
+
+  if (!PUBLIC_KEY || !SERVICE_ID || !TEMPLATE_ID) {
+    setBox('warn', '⚠️',
+      'E-mail non envoyé — configuration EmailJS incomplète.',
+      'Vérifiez <code>EMAILJS_PUBLIC_KEY</code>, <code>EMAILJS_SERVICE_ID</code> et <code>EMAILJS_WELCOME_TEMPLATE_ID</code> dans le fichier <code>.env</code>.'
+    );
+    log('ABORT: clé(s) manquante(s).');
+    return;
+  }
+
+  emailjs.init(PUBLIC_KEY);
+  log('EmailJS initialisé.');
+
+  // Template params — works for both a welcome template and the ticket template as fallback
+  const params = {
+    to_name:        club,
+    to_email:       email,
+    username:       uname,
+    // Fallback values so the ticket template doesn't error on missing vars
+    event_name:     'Campus QR Event — Bienvenue !',
+    event_date:     new Date().toLocaleDateString('fr-FR'),
+    event_location: 'Votre plateforme en ligne',
+    ticket_id:      uname,
+    qr_code_url:    window.location.origin + '/static/qrcodes/',
+  };
+
+  log('Envoi via emailjs.send()…');
+
+  emailjs.send(SERVICE_ID, TEMPLATE_ID, params)
+    .then(function (res) {
+      log('Succès : ' + res.status + ' ' + res.text);
+      setBox('ok', '✅',
+        'E-mail de bienvenue envoyé à <strong>' + email + '</strong>',
+        'Vérifiez votre boîte de réception (et les spams).'
+      );
+    })
+    .catch(function (err) {
+      log('ERREUR : ' + JSON.stringify(err));
+      const hint = (err && err.text)
+        ? err.text
+        : (err && err.status === 400
+            ? 'Variables du template incorrectes — vérifiez votre template EmailJS.'
+            : 'Erreur inconnue, consultez les détails techniques ci-dessous.');
+      setBox('err', '⚠️',
+        'L\'e-mail n\'a pas pu être envoyé.',
+        hint
+      );
+    });
+})();
+</script>
+{% endblock %}
