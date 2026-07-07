@@ -168,7 +168,7 @@ def init_db():
     cursor.execute("SELECT COUNT(*) FROM admins")
     if cursor.fetchone()[0] == 0:
         default_username = 'admin'
-        default_password = 'adminje'
+        default_password = 'je'
         hashed_password = generate_password_hash(default_password)
         cursor.execute(
             "INSERT INTO admins (username, password_hash, club_name, email) VALUES (?, ?, ?, ?)",
